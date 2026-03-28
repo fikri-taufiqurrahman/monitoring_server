@@ -10,18 +10,11 @@ jobs:
     runs-on: self-hosted 
     
     steps:
-      # Kita tidak butuh 'appleboy/ssh-action' lagi karena
-      # perintah di bawah ini akan dijalankan LANGSUNG di terminal Lenovo kamu.
-      - name: Update and Rebuild on Lenovo Server
+      - name: Update and Rebuild
         run: |
-          # 1. Masuk ke direktori project di server
-          cd ~/project/monitoring_server
-          
-          # 2. Ambil perubahan kode terbaru dari GitHub
+          cd /home/fikri/project/monitoring_server
           git pull origin main
-          
-          # 3. Compile ulang aplikasi Go
-          /usr/local/go/bin/go build -o monitoring_app .
-          
-          # 4. Restart service systemd
+          # Pakai path Go yang sudah terinstall di server (cek pakai 'which go')
+          go build -o monitoring_app .
+          # Jalankan restart (sekarang harusnya tanpa password)
           sudo systemctl restart monitoring_server
