@@ -10,6 +10,7 @@ import (
 	"monitoring_server/internal/battery"
 	"monitoring_server/internal/cpu"
 	"monitoring_server/internal/disk"
+	"monitoring_server/internal/gpu"
 	"monitoring_server/internal/memory"
 	"monitoring_server/internal/network"
 	"monitoring_server/internal/sysinfo"
@@ -24,6 +25,7 @@ type SystemInfo struct {
 	CPU         cpu.CPUInfo         `json:"cpu"`
 	Memory      memory.MemInfo      `json:"memory"`
 	Disk        disk.DiskInfo       `json:"disk"`
+	GPU         gpu.GPUInfo         `json:"gpu"`
 	Network     network.NetInfo     `json:"network"`
 	Temperature float64             `json:"temperature"`
 	LoadAvg     sysinfo.LoadInfo    `json:"load_average"`
@@ -39,6 +41,7 @@ func main() {
 	cpuService := cpu.NewService()
 	memService := memory.NewService()
 	diskService := disk.NewService("/")
+	gpuService := gpu.NewService()
 	netService := network.NewService()
 	sysService := sysinfo.NewService()
 	batteryService := battery.NewService()
@@ -47,12 +50,13 @@ func main() {
 	cpuHandler := cpu.NewHandler(cpuService)
 	memHandler := memory.NewHandler(memService)
 	diskHandler := disk.NewHandler(diskService)
+	gpuHandler := gpu.NewHandler(gpuService)
 	netHandler := network.NewHandler(netService)
 	sysHandler := sysinfo.NewHandler(sysService)
 	batteryHandler := battery.NewHandler(batteryService)
 
 	// Background updater
-	go updateAllData(cpuService, memService, diskService, netService, sysService, batteryService)
+	go updateAllData(cpuService, memService, diskService, gpuService, netService, sysService, batteryService)
 
 	// Routes
 	http.HandleFunc("/", homePage)
@@ -60,6 +64,7 @@ func main() {
 	http.HandleFunc("/api/cpu", cpuHandler.GetCPUInfoHandler)
 	http.HandleFunc("/api/memory", memHandler.GetMemInfoHandler)
 	http.HandleFunc("/api/disk", diskHandler.GetDiskInfoHandler)
+	http.HandleFunc("/api/gpu", gpuHandler.GetGPUInfoHandler)
 	http.HandleFunc("/api/network", netHandler.GetNetInfoHandler)
 	http.HandleFunc("/api/system", sysHandler.GetSystemInfoHandler)
 	http.HandleFunc("/api/battery", batteryHandler.GetBatteryInfoHandler)
