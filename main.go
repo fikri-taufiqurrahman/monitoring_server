@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"time"
 
+	"monitoring_server/internal/battery"
 	"monitoring_server/internal/cpu"
 	"monitoring_server/internal/disk"
 	"monitoring_server/internal/memory"
@@ -15,19 +16,20 @@ import (
 )
 
 type SystemInfo struct {
-	Hostname    string           `json:"hostname"`
-	OS          string           `json:"os"`
-	Platform    string           `json:"platform"`
-	PlatformVer string           `json:"platform_version"`
-	Uptime      uint64           `json:"uptime"`
-	CPU         cpu.CPUInfo      `json:"cpu"`
-	Memory      memory.MemInfo   `json:"memory"`
-	Disk        disk.DiskInfo    `json:"disk"`
-	Network     network.NetInfo  `json:"network"`
-	Temperature float64          `json:"temperature"`
-	LoadAvg     sysinfo.LoadInfo `json:"load_average"`
-	Processes   int              `json:"processes"`
-	LastUpdate  time.Time        `json:"last_update"`
+	Hostname    string              `json:"hostname"`
+	OS          string              `json:"os"`
+	Platform    string              `json:"platform"`
+	PlatformVer string              `json:"platform_version"`
+	Uptime      uint64              `json:"uptime"`
+	CPU         cpu.CPUInfo         `json:"cpu"`
+	Memory      memory.MemInfo      `json:"memory"`
+	Disk        disk.DiskInfo       `json:"disk"`
+	Network     network.NetInfo     `json:"network"`
+	Temperature float64             `json:"temperature"`
+	LoadAvg     sysinfo.LoadInfo    `json:"load_average"`
+	Processes   int                 `json:"processes"`
+	Battery     battery.BatteryInfo `json:"battery"`
+	LastUpdate  time.Time           `json:"last_update"`
 }
 
 var systemInfo SystemInfo
@@ -39,6 +41,7 @@ func main() {
 	diskService := disk.NewService("/")
 	netService := network.NewService()
 	sysService := sysinfo.NewService()
+	batteryService := battery.NewService()
 
 	// Inisialisasi handlers
 	cpuHandler := cpu.NewHandler(cpuService)
@@ -46,11 +49,12 @@ func main() {
 	diskHandler := disk.NewHandler(diskService)
 	netHandler := network.NewHandler(netService)
 	sysHandler := sysinfo.NewHandler(sysService)
+	batteryHandler := battery.NewHandler(batteryService)
 
 	// Background updater
-	go updateAllData(cpuService, memService, diskService, netService, sysService)
+	go updateAllData(cpuService, memService, diskService, netService, sysService, batteryService)
 
-	// Routes - HANYA 6 ENDPOINTS
+	// Routes
 	http.HandleFunc("/", homePage)
 	http.HandleFunc("/api/monitor", apiMonitor)
 	http.HandleFunc("/api/cpu", cpuHandler.GetCPUInfoHandler)
@@ -58,6 +62,10 @@ func main() {
 	http.HandleFunc("/api/disk", diskHandler.GetDiskInfoHandler)
 	http.HandleFunc("/api/network", netHandler.GetNetInfoHandler)
 	http.HandleFunc("/api/system", sysHandler.GetSystemInfoHandler)
+	http.HandleFunc("/api/battery", batteryHandler.GetBatteryInfoHandler)
+	http.HandleFunc("/api/battery/percentage", batteryHandler.GetBatteryPercentageHandler)
+	http.HandleFunc("/api/battery/status", batteryHandler.GetBatteryStatusHandler)
+	http.HandleFunc("/api/battery/health", batteryHandler.GetBatteryHealthHandler)
 	http.HandleFunc("/health", healthCheck)
 
 	// Static files
@@ -66,7 +74,7 @@ func main() {
 	port := ":8081"
 	log.Printf("🚀 Monitoring Server berjalan di http://localhost%s", port)
 	log.Println("📊 Monitor resource server secara real-time")
-	log.Printf("📍 Endpoints: /, /api/monitor, /api/cpu, /api/memory, /api/disk, /api/network, /api/system, /health")
+	log.Printf("📍 Endpoints: /, /api/monitor, /api/cpu, /api/memory, /api/disk, /api/network, /api/system, /api/battery*, /health")
 	log.Fatal(http.ListenAndServe(port, nil))
 }
 
@@ -76,6 +84,7 @@ func updateAllData(
 	diskService *disk.Service,
 	netService *network.Service,
 	sysService *sysinfo.Service,
+	batteryService *battery.Service,
 ) {
 	for {
 		cpuInfo, _ := cpuService.GetCPUInfo()
@@ -83,6 +92,7 @@ func updateAllData(
 		diskInfo, _ := diskService.GetDiskInfo()
 		netInfo, _ := netService.GetNetInfo()
 		sysInfo, _ := sysService.GetSystemInfo()
+		batteryInfo, _ := batteryService.GetBatteryInfo()
 
 		systemInfo = SystemInfo{
 			Hostname:    sysInfo.Hostname,
@@ -97,6 +107,7 @@ func updateAllData(
 			Temperature: sysInfo.Temperature,
 			LoadAvg:     sysInfo.LoadAvg,
 			Processes:   sysInfo.Processes,
+			Battery:     batteryInfo,
 			LastUpdate:  time.Now(),
 		}
 
