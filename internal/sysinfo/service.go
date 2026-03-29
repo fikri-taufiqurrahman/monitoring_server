@@ -2,7 +2,6 @@ package sysinfo
 
 import (
 	"fmt"
-	"os"
 	"time"
 
 	"github.com/shirou/gopsutil/v3/host"
@@ -46,34 +45,26 @@ func (s *Service) GetSystemInfo() (SystemInfo, error) {
 }
 
 func (s *Service) getTemperature() float64 {
-	// Coba dari gopsutil
 	tempSensors, err := host.SensorsTemperatures()
-	if err == nil && len(tempSensors) > 0 {
-		for _, sensor := range tempSensors {
-			if sensor.Temperature > 0 {
-				return sensor.Temperature
-			}
+	if err != nil || len(tempSensors) == 0 {
+		return 0
+	}
+
+	var cpuTemp float64
+	for _, sensor := range tempSensors {
+		// Cari sensor AMD (Tctl/Tdie) atau Package Temp
+		// Biasanya SensorKey-nya mengandung "Tctl" atau "composite"
+		if sensor.SensorKey == "Tctl" || sensor.SensorKey == "package_id_0" {
+			return sensor.Temperature
+		}
+
+		// Simpan suhu tertinggi sebagai cadangan (fallback)
+		if sensor.Temperature > cpuTemp {
+			cpuTemp = sensor.Temperature
 		}
 	}
 
-	// Fallback ke thermal zone
-	zones := []string{
-		"/sys/class/thermal/thermal_zone0/temp",
-		"/sys/class/thermal/thermal_zone1/temp",
-		"/sys/class/thermal/thermal_zone2/temp",
-	}
-
-	for _, zone := range zones {
-		data, err := os.ReadFile(zone)
-		if err == nil {
-			var temp int64
-			fmt.Sscanf(string(data), "%d", &temp)
-			if temp > 0 {
-				return float64(temp) / 1000.0
-			}
-		}
-	}
-	return 0
+	return cpuTemp // Return yang tertinggi kalau Tctl gak ketemu
 }
 
 func formatUptime(seconds uint64) string {
