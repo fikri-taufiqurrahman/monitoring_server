@@ -28,7 +28,7 @@ type SystemInfo struct {
 	Temperature float64             `json:"temperature"`
 	LoadAvg     sysinfo.LoadInfo    `json:"load_average"`
 	Processes   int                 `json:"processes"`
-	Battery     battery.BatteryInfo `json:"battery"`
+	Battery     battery.BatteryInfo `json:"battery"` // <-- field battery
 	LastUpdate  time.Time           `json:"last_update"`
 }
 
@@ -92,7 +92,7 @@ func updateAllData(
 		diskInfo, _ := diskService.GetDiskInfo()
 		netInfo, _ := netService.GetNetInfo()
 		sysInfo, _ := sysService.GetSystemInfo()
-		batteryInfo, _ := batteryService.GetBatteryInfo()
+		batteryInfo, _ := batteryService.GetBatteryInfo() // bisa error, tapi akan tetap zero value
 
 		systemInfo = SystemInfo{
 			Hostname:    sysInfo.Hostname,
@@ -107,7 +107,7 @@ func updateAllData(
 			Temperature: sysInfo.Temperature,
 			LoadAvg:     sysInfo.LoadAvg,
 			Processes:   sysInfo.Processes,
-			Battery:     batteryInfo,
+			Battery:     batteryInfo, // akan tetap diisi meskipun kosong
 			LastUpdate:  time.Now(),
 		}
 
