@@ -2,7 +2,6 @@ package battery
 
 import (
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -20,44 +19,31 @@ func NewService() *Service {
 	return &Service{}
 }
 
-// readFloat membaca file dan mengembalikan nilai float64 (dalam mWh atau mV)
-// Konversi dari micro ke milli jika perlu (dibagi 1000)
+// --- FUNGSI INTERNAL ---
+
 func readFloat(path, filename string) (float64, error) {
-	data, err := ioutil.ReadFile(filepath.Join(path, filename))
+	data, err := os.ReadFile(filepath.Join(path, filename))
 	if err != nil {
 		return 0, err
 	}
-	// Hapus newline dan spasi
 	str := strings.TrimSpace(string(data))
 	num, err := strconv.ParseFloat(str, 64)
 	if err != nil {
 		return 0, err
 	}
-	// Biasanya nilai dalam micro, konversi ke milli
 	return num / 1000, nil
 }
 
-// readAmp membaca arus (current) dalam mW = ampere * voltage
-func readAmp(path, filename string, volts float64) (float64, error) {
-	val, err := readFloat(path, filename)
-	if err != nil {
-		return 0, err
-	}
-	return val * volts, nil
-}
-
-// isBattery mengecek apakah direktori adalah baterai
 func isBattery(path string) bool {
-	data, err := ioutil.ReadFile(filepath.Join(path, "type"))
+	data, err := os.ReadFile(filepath.Join(path, "type"))
 	if err != nil {
 		return false
 	}
 	return strings.TrimSpace(string(data)) == "Battery"
 }
 
-// getBatteryPaths mengembalikan daftar path baterai
 func getBatteryPaths() ([]string, error) {
-	files, err := ioutil.ReadDir(sysfs)
+	files, err := os.ReadDir(sysfs)
 	if err != nil {
 		return nil, err
 	}
@@ -71,78 +57,49 @@ func getBatteryPaths() ([]string, error) {
 	return paths, nil
 }
 
-// GetBatteryInfo mengambil info baterai pertama yang ditemukan
+// --- PUBLIC METHODS (Yang dibutuhkan handler.go) ---
 func (s *Service) GetBatteryInfo() (BatteryInfo, error) {
 	paths, err := getBatteryPaths()
-	if err != nil {
-		return BatteryInfo{}, fmt.Errorf("failed to read battery paths: %v", err)
-	}
-	if len(paths) == 0 {
+	if err != nil || len(paths) == 0 {
 		return BatteryInfo{}, fmt.Errorf("no battery found")
 	}
 	path := paths[0]
 
-	var (
-		current    float64 // mWh
-		full       float64 // mWh
-		design     float64 // mWh
-		voltage    float64 // V
-		chargeRate float64 // mW
-		statusStr  string
-	)
+	var current, full, design, voltage float64 // voltage sudah dideklarasikan di sini
+	var statusStr string
 
-	// Baca energy_now atau charge_now
+	// 1. Gunakan 'voltage' langsung, pakai '=' karena sudah di-declare di atas
+	voltage, _ = readFloat(path, "voltage_now")
+	voltageV := voltage / 1000
+
 	energyNow, err := readFloat(path, "energy_now")
-	if err != nil && os.IsNotExist(err) {
-		// Fallback ke charge_now
-		voltage, _ = readFloat(path, "voltage_now")
-		voltage /= 1000 // konversi ke Volt
-		chargeNow, err := readFloat(path, "charge_now")
-		if err == nil {
-			current = chargeNow * voltage
-		}
-		fullCharge, err := readFloat(path, "charge_full")
-		if err == nil {
-			full = fullCharge * voltage
-		}
-		designCharge, err := readFloat(path, "charge_full_design")
-		if err == nil {
-			design = designCharge * voltage
-		}
-		chargeRate, err = readFloat(path, "current_now")
-		if err == nil {
-			chargeRate = chargeRate * voltage
-		}
-	} else {
+	if err == nil {
 		current = energyNow
 		full, _ = readFloat(path, "energy_full")
 		design, _ = readFloat(path, "energy_full_design")
-		chargeRate, _ = readFloat(path, "power_now")
-		voltage, _ = readFloat(path, "voltage_now")
-		voltage /= 1000 // konversi ke Volt
+	} else {
+		chargeNow, _ := readFloat(path, "charge_now")
+		current = chargeNow * voltageV
+		chargeFull, _ := readFloat(path, "charge_full")
+		full = chargeFull * voltageV
+		chargeDesign, _ := readFloat(path, "charge_full_design")
+		design = chargeDesign * voltageV
 	}
 
-	// Baca status
-	statusData, err := ioutil.ReadFile(filepath.Join(path, "status"))
+	statusData, err := os.ReadFile(filepath.Join(path, "status"))
 	if err == nil {
 		statusStr = strings.TrimSpace(string(statusData))
-		// Normalisasi status
-		switch statusStr {
-		case "Not charging":
+		if statusStr == "Not charging" {
 			statusStr = "Idle"
 		}
 	} else {
 		statusStr = "Unknown"
 	}
 
-	// Hitung persentase
-	var percentage float64
+	var percentage, health float64
 	if full > 0 {
 		percentage = (current / full) * 100
 	}
-
-	// Hitung health
-	var health float64
 	if design > 0 {
 		health = (full / design) * 100
 	}
@@ -155,12 +112,10 @@ func (s *Service) GetBatteryInfo() (BatteryInfo, error) {
 		EnergyNow:    int64(current),
 		EnergyFull:   int64(full),
 		EnergyDesign: int64(design),
-		Voltage:      int64(voltage * 1000), // kembali ke mV
+		Voltage:      int64(voltage), // 2. Pakai 'voltage' di sini
 		Health:       health,
 	}, nil
 }
-
-// GetBatteryPercentage mengambil persentase baterai
 func (s *Service) GetBatteryPercentage() (float64, error) {
 	info, err := s.GetBatteryInfo()
 	if err != nil {
@@ -169,7 +124,6 @@ func (s *Service) GetBatteryPercentage() (float64, error) {
 	return info.Percentage, nil
 }
 
-// GetBatteryStatus mengambil status baterai
 func (s *Service) GetBatteryStatus() (string, error) {
 	info, err := s.GetBatteryInfo()
 	if err != nil {
@@ -178,16 +132,6 @@ func (s *Service) GetBatteryStatus() (string, error) {
 	return info.Status, nil
 }
 
-// IsCharging mengecek apakah baterai sedang dicharge
-func (s *Service) IsCharging() (bool, error) {
-	info, err := s.GetBatteryInfo()
-	if err != nil {
-		return false, err
-	}
-	return info.Status == "Charging", nil
-}
-
-// GetBatteryHealth mengambil kesehatan baterai
 func (s *Service) GetBatteryHealth() (float64, error) {
 	info, err := s.GetBatteryInfo()
 	if err != nil {
@@ -196,7 +140,14 @@ func (s *Service) GetBatteryHealth() (float64, error) {
 	return info.Health, nil
 }
 
-// GetLastCheck mengembalikan waktu terakhir cek
+func (s *Service) IsCharging() (bool, error) {
+	info, err := s.GetBatteryInfo()
+	if err != nil {
+		return false, err
+	}
+	return info.Status == "Charging", nil
+}
+
 func (s *Service) GetLastCheck() time.Time {
 	return s.lastCheck
 }
