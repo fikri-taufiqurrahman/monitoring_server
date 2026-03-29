@@ -141,28 +141,34 @@ document.addEventListener('DOMContentLoaded', () => {
                 setText('net-recv', fmt(data.network.bytes_recv));
                 setText('net-conn', data.network.connections ?? '—');
             }
-            // Tambahkan setelah blok network
             if (data.battery) {
-                const battPct = parseFloat(data.battery.percentage).toFixed(1);
-                const battStatus = data.battery.status || 'Unknown';
+                const b = data.battery;
+                const pct = parseFloat(b.percentage);
+                const pctStr = pct.toFixed(1);
 
-                setBigVal('batt-percent', battPct);
-                setWidth('batt-fill', battPct);
-                setBattBarColor('batt-fill', battPct);
-                setText('batt-status-badge', battStatus);
-                setBattStatusColor('batt-status-badge', battStatus);
-                setText('batt-energy-now', (data.battery.energy_now || 0).toLocaleString() + ' mWh');
-                setText('batt-energy-full', (data.battery.energy_full || 0).toLocaleString() + ' mWh');
-                setText('batt-health', parseFloat(data.battery.health || 0).toFixed(1) + '%');
-                setText('batt-voltage', (data.battery.voltage || 0).toLocaleString() + ' mV');
-                setText('batt-design', (data.battery.energy_design || 0).toLocaleString() + ' mWh');
-                setText('batt-status-text', battStatus);
+                setBigVal('batt-percent', pctStr);
 
-                // Update icon fill
+                // bar width
+                const barEl = document.getElementById('batt-fill');
+                if (barEl) barEl.style.width = Math.min(100, pct) + '%';
+
+                // icon fill width (max 24px = full, mapped from 2px to 26px range)
                 const iconFill = document.getElementById('batt-icon-fill');
-                if (iconFill) {
-                    iconFill.style.width = Math.min(100, battPct) + '%';
+                if (iconFill) iconFill.setAttribute('width', (pct / 100 * 24).toFixed(1));
+
+                // status badge
+                const badge = document.getElementById('batt-status-badge');
+                if (badge) {
+                    const s = (b.status || 'idle').toLowerCase();
+                    badge.textContent = (b.status || 'Idle').toUpperCase();
+                    badge.className = 'batt-status-badge ' + s;
                 }
+
+                setText('batt-health', parseFloat(b.health || 0).toFixed(1) + '%');
+                setText('batt-energy-now', (b.energy_now || 0).toLocaleString() + ' mWh');
+                setText('batt-energy-full', (b.energy_full || 0).toLocaleString() + ' mWh');
+                setText('batt-voltage', (b.voltage || 0).toLocaleString() + ' mV');
+                setText('batt-design', (b.energy_design || 0).toLocaleString() + ' mWh');
             }
 
             setText('info-hostname', data.hostname || '—');
