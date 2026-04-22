@@ -18,4 +18,4 @@ jobs:
           go build -o monitoring_server .
       - name: Restart Service
         run: |
-          sudo /usr/local/bin/restart-app monitoring_server
+          sudo /usr/local/bin/restart-app monitoring_server monitoring_server
